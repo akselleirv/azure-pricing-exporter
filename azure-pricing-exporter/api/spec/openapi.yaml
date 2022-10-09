@@ -1,0 +1,82 @@
+openapi: 3.0.0
+info:
+  title: azure-pricing-exporter
+  description: ""
+  version: 0.0.1
+paths:
+  /:
+    get:
+      summary: Welcome Message
+      description: A convinient endpoint for your sanity test.
+      operationId: WelcomeGet
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Welcome'
+  /config:
+    get:
+      summary: View running config
+      description: See the current config
+      operationId: ConfigGet
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Config'
+  /metrics/pricing/azure:
+    get:
+      summary: Azure Pricing
+      description: A Prometheus metrics formatted overview of Azure Prices
+      operationId: MetricsPricingAzureGet
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            text/plain:
+              schema: {}
+components:
+  schemas:
+    AzurePriceResolverOpts:
+      type: object
+      required:
+        - armSkuName
+        - location
+        - currencyCode
+      properties:
+        armSkuName:
+          type: string
+        location:
+          type: string
+        currencyCode:
+          type: string
+    Config:
+      type: object
+      required:
+        - intervalInMinutes
+        - concurrencyLevel
+        - timestamp
+        - resolvePricesFor
+      properties:
+        intervalInMinutes:
+          type: number
+        concurrencyLevel:
+          type: integer
+        timestamp:
+          type: string
+        resolvePricesFor:
+          type: array
+          items:
+            $ref: '#/components/schemas/AzurePriceResolverOpts'
+    Welcome:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: Message is a welcome message
+          type: string

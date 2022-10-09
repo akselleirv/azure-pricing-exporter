@@ -1,0 +1,17 @@
+package api
+
+import (
+	"net/http"
+
+	"github.com/labstack/echo/v4"
+)
+
+type Server struct{}
+
+func New{{ .ServiceName | ToCamel }}() *Server {
+    return &Server{}
+}
+
+func (s *Server) WelcomeGet(c echo.Context) error {
+	return c.String(http.StatusOK, "Hello from {{ .ServiceName }}!")
+}

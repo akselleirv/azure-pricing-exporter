@@ -1,0 +1,16 @@
+{
+    "intervalInMinutes": 60,
+    "concurrencyLevel": 3,
+    "resolvePricesFor": [
+        {
+            "armSkuName": "Standard_B2ms",
+            "location": "norwayeast",
+            "currencyCode": "NOK"
+        },
+        {
+            "armSkuName": "Standard_B4ms",
+            "location": "norwayeast",
+            "currencyCode": "NOK"
+        }
+    ]
+}

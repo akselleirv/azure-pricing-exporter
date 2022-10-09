@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: azure-pricing-exporter
+  name: azure-pricing-exporter
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: azure-pricing-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: azure-pricing-exporter
+    spec:
+      containers:
+        - name: azure-pricing-exporter
+          image: localhost:5000/azure-pricing-exporter
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: config
+              mountPath: /mnt
+          env:
+            - name: CONFIG_PATH
+              value: /mnt/config.json
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: azure-resources-export-config
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: azure-pricing-exporter
+  namespace: default
+  labels:
+    app.kubernetes.io/name: azure-pricing-exporter
+spec:
+  selector:
+    app.kubernetes.io/name: azure-pricing-exporter
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: client
+      protocol: TCP

@@ -1,0 +1,8 @@
+package: api
+output: api/server.gen.go
+additional-imports:
+  - package: github.com/akselleirv/azure-pricing-exporter
+    alias: .
+generate:
+  echo-server: true
+  embedded-spec: true

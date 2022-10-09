@@ -1,0 +1,8 @@
+package: api
+output: api/server.gen.go
+additional-imports:
+  - package: {{ .ModuleName }}
+    alias: .
+generate:
+  echo-server: true
+  embedded-spec: true
