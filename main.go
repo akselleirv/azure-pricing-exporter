@@ -1,84 +1,76 @@
 package main
 
 import (
-	"flag"
-	"fmt"
-	"html/template"
-	"io"
-	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/iancoleman/strcase"
+	"github.com/akselleirv/azure-pricing-exporter/api"
+	"github.com/akselleirv/azure-pricing-exporter/internal/azure"
+	oapiCodegenMiddleware "github.com/deepmap/oapi-codegen/pkg/middleware"
+	"github.com/heptiolabs/healthcheck"
+	"github.com/labstack/echo-contrib/prometheus"
+	"github.com/labstack/echo/v4"
+	echoMiddleware "github.com/labstack/echo/v4/middleware"
 )
 
-type Config struct {
-	ModuleName  string
-	ServiceName string
-	OutputPath  string
-}
-
 func main() {
-	cfg := Config{}
-	flag.StringVar(&cfg.ModuleName, "module-name", "", "the name of the new module")
-	flag.StringVar(&cfg.ServiceName, "service-name", "", "the name of the new service")
-	flag.StringVar(&cfg.OutputPath, "output", "", "the path to output the files")
-	flag.Parse()
+	swagger, err := api.GetSwagger()
+	if err != nil {
+		log.Fatalln("error loading swagger spec: ", err.Error())
+	}
+	resolver := azure.New()
+	done := make(chan struct{})
 
-	if cfg.ModuleName == "" {
-		fmt.Println("Module name cannot be empty!")
-		os.Exit(1)
+	cfgPath := os.Getenv("CONFIG_PATH")
+	if cfgPath == "" {
+		cfgPath = "config.json"
 	}
 
-	if cfg.ServiceName == "" {
-		fmt.Println("Service name cannot be empty!")
-		os.Exit(1)
+	service, err := api.NewCostsService(cfgPath, resolver, done)
+	if err != nil {
+		log.Fatalln("error creating service", err.Error())
 	}
+	e := echo.New()
+	healthProbes(e)
+	setupMetrics(e)
+	e.Use(echoMiddleware.Recover())
 
-	if err := parseTemplates(cfg); err != nil {
-		log.Fatalln(err)
-	}
+	// If the apiRouter is not created, then the OpenAPI request validator will
+	// block any requests which are not mentioned in the spec.
+	apiRouter := e.Group("")
+	apiRouter.Use(oapiCodegenMiddleware.OapiRequestValidator(swagger))
+
+	api.RegisterHandlers(apiRouter, service)
+	e.HideBanner = true
+	e.Logger.Fatal(e.Start(":8080"))
 }
 
-func parseTemplates(cfg Config) error {
-	return filepath.WalkDir("./templates", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
+// setupMetrics starts a metrics server on :9090
+func setupMetrics(e *echo.Echo) {
+	prom := prometheus.NewPrometheus("", nil)
+	e.Use(prom.HandlerFunc)
+	metricServer := echo.New()
+	metricServer.HidePort = true
+	metricServer.HideBanner = true
+	prom.SetMetricsPath(metricServer)
 
-		newFilePath := strings.Join(strings.Split(path, "templates/")[1:], "")
-		newFilePath = strings.ReplaceAll(newFilePath, ".tmpl", "")
-		outputLocation := fmt.Sprintf("%s/%s", cfg.OutputPath, newFilePath)
-		if err := os.MkdirAll(filepath.Dir(outputLocation), 0755); err != nil {
-			if !os.IsExist(err) {
-				return fmt.Errorf("failed creating dir: %w", err)
-			}
-		}
-		f, err := os.Create(outputLocation)
-		if err != nil {
-			return fmt.Errorf("failed creating output file: %w", err)
-		}
-		defer f.Close()
+	go func() {
+		e.Logger.Fatal(metricServer.Start(":9090"))
+	}()
+}
 
-		if !strings.Contains(filepath.Base(path), ".tmpl") {
-			scaffoldFile, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer scaffoldFile.Close()
-			_, err = io.Copy(f, scaffoldFile)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-		return template.Must(template.New(filepath.Base(path)).Funcs(template.FuncMap{
-			"ToCamel": strcase.ToCamel,
-		}).ParseFiles(path)).Execute(f, cfg)
+func healthProbes(e *echo.Echo) {
+	health := healthcheck.NewHandler()
+	health.AddReadinessCheck("todo", func() error {
+		return nil
+	})
+
+	e.GET("/ready", func(c echo.Context) error {
+		health.ReadyEndpoint(c.Response().Writer, c.Request())
+		return nil
+	})
+	e.GET("/live", func(c echo.Context) error {
+		health.LiveEndpoint(c.Response().Writer, c.Request())
+		return nil
 	})
 }
